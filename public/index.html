@@ -3,12 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chat App</title>
+    <title>Chat & Draw App</title>
     <style>
+      body {
+        font-family: sans-serif;
+        margin: 20px;
+      }
       .chat {
         display: flex;
         flex-direction: column;
-        height: 80vh;
+        height: 300px;
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin-bottom: 20px;
       }
       .messages {
         flex: 1;
@@ -23,12 +30,15 @@
       .input {
         flex: 1;
         padding: 10px;
+        font-size: 16px;
         border: 1px solid #ccc;
       }
       .submit {
         padding: 10px;
+        font-size: 16px;
         border: 1px solid #ccc;
-        background: #eee;
+        background: #4CAF50;
+        color: white;
         cursor: pointer;
       }
     </style>
@@ -56,8 +66,28 @@
 
         const canvas = document.getElementById('canvas')
         const ctx = canvas.getContext('2d')
-
         let drawing = false
+
+        // 🎨 固定カラーパレット（明るくて見分けやすい）
+        const availableColors = [
+          '#e6194b', '#3cb44b', '#ffe119', '#4363d8',
+          '#f58231', '#911eb4', '#46f0f0', '#f032e6',
+          '#bcf60c', '#fabebe', '#008080', '#e6beff',
+          '#9a6324', '#fffac8', '#800000', '#aaffc3',
+          '#808000', '#ffd8b1', '#000075', '#808080'
+        ]
+        let colorIndex = 0
+        const userColors = {}
+
+        function getUserColor(id) {
+          if (!userColors[id]) {
+            userColors[id] = availableColors[colorIndex % availableColors.length]
+            colorIndex++
+          }
+          return userColors[id]
+        }
+
+        const myColor = getUserColor(myId)
 
         canvas.addEventListener('mousedown', (e) => {
           sendDrawingEvent(e.offsetX, e.offsetY, 'mousedown')
@@ -72,9 +102,9 @@
             sendDrawingEvent(e.offsetX, e.offsetY, 'mousemove')
           }
         })
-        function mousemove(x, y) {
+        function mousemove(x, y, color) {
           if (drawing) {
-            draw(x, y, true)
+            draw(x, y, true, color)
           }
         }
 
@@ -93,7 +123,10 @@
           drawing = false
         }
 
-        function draw(x, y, dragging) {
+        function draw(x, y, dragging, color) {
+          ctx.strokeStyle = color || '#000000'
+          ctx.lineWidth = 2
+          ctx.lineCap = 'round'
           if (dragging) {
             ctx.lineTo(x, y)
             ctx.stroke()
@@ -103,40 +136,38 @@
         }
 
         function sendDrawingEvent(x, y, control) {
-          const message = JSON.stringify({ x, y, control, type: 'paint' })
+          const message = JSON.stringify({ x, y, control, type: 'paint', id: myId })
           ws.send(message)
         }
 
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data)
           if (msg.type === 'paint') {
-            const { x, y, control } = msg
-            console.log({ control })
+            const { x, y, control, id } = msg
+            const color = getUserColor(id)
             if (control === 'mousedown') {
               mousedown()
             } else if (control === 'mouseup') {
               mouseup()
             } else if (control === 'mousemove') {
-              mousemove(x, y)
+              mousemove(x, y, color)
             } else if (control === 'mouseout') {
               mouseout()
             }
           }
           if (msg.type === 'chat') {
             const { id, text } = msg
+            const color = getUserColor(id)
             const messageList = document.querySelector('.messages')
             const li = document.createElement('li')
-            if (id === myId) {
-              li.textContent = `(${id})自分:` + text
-            } else {
-              li.textContent = id + ': ' + text
-            }
+            li.style.color = color
+            li.textContent = (id === myId ? '(自分)' : id) + ': ' + text
             messageList.appendChild(li)
+            messageList.scrollTop = messageList.scrollHeight
           }
         }
 
         const form = document.querySelector('.form')
-
         form.onsubmit = function (e) {
           e.preventDefault()
           const input = document.querySelector('.input')
